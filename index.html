@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Channel</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+
+<body>
+    <header>
+        <a href="index.html" class="logo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="url(#grad1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" /> <!-- Violet -->
+                        <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" /> <!-- Cyan -->
+                    </linearGradient>
+                </defs>
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            VidFlow
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="main-player">
+            <!-- Custom Video Player -->
+            <div class="video-container" id="videoContainer">
+                <video id="video"></video> <!-- No controls attribute, we build our own -->
+
+                <!-- Center Play Button (Pulse) -->
+                <div class="center-play-btn" id="centerPlayBtn">
+                    <svg viewBox="0 0 24 24">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </div>
+
+                <!-- Rotate Button (Top Right Overlay) -->
+                <div id="rotateBtn" class="rotate-overlay-btn" title="Rotate Video">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M7.11 8.53L5.79 7.21C2.46 10.54 2.46 15.96 5.79 19.29C9.12 22.62 14.54 22.62 17.87 19.29C21.2 15.96 21.2 10.54 17.87 7.21L16.55 8.53C19.16 11.14 19.16 15.36 16.55 17.97C13.94 20.58 9.72 20.58 7.11 17.97C4.5 15.36 4.5 11.14 7.11 8.53Z" />
+                        <path d="M12.44 3.77L10.67 5.54L14.21 9.08L17.75 5.54L15.98 3.77L14.21 2L12.44 3.77Z" />
+                    </svg>
+                </div>
+
+                <!-- Bottom Controls Bar -->
+                <div class="custom-controls">
+                    <!-- Progress -->
+                    <div class="progress-container" id="progressContainer">
+                        <div class="progress-filled" id="progressFilled"></div>
+                    </div>
+
+                    <div class="controls-row">
+                        <div class="left-controls">
+                            <button class="control-btn" id="playPauseBtn">
+                                <svg viewBox="0 0 24 24" id="playPauseIcon">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon> <!-- Play by default -->
+                                </svg>
+                            </button>
+                            <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+                        </div>
+                        <div class="right-controls">
+                            <!-- Volume/Fullscreen placeholders if needed -->
+                            <button class="control-btn" id="fsBtn" title="Fullscreen">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info -->
+            <div class="video-info">
+                <h1 class="video-title" id="vidTitle">Loading...</h1>
+                <div class="card-meta" id="vidDate"></div>
+                <div class="video-desc" id="vidDesc"></div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <h3 class="sidebar-title">Up Next</h3>
+            <div id="relatedList" class="related-list">
+                <!-- Related videos here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        let videoId = urlParams.get('v');
+
+        // DOM Elements
+        const video = document.getElementById('video');
+        const videoContainer = document.getElementById('videoContainer');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const centerPlayBtn = document.getElementById('centerPlayBtn');
+        const playPauseIcon = document.getElementById('playPauseIcon');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFilled = document.getElementById('progressFilled');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const fsBtn = document.getElementById('fsBtn');
+        const rotateBtn = document.getElementById('rotateBtn');
+
+        let currentRotation = 0;
+
+        // --- Custom Player Logic ---
+
+        function togglePlay() {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        }
+
+        function updatePlayIcon() {
+            if (video.paused) {
+                // Show Play Icon
+                playPauseIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+                videoContainer.classList.add('paused');
+            } else {
+                // Show Pause Icon
+                playPauseIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+                videoContainer.classList.remove('paused');
+            }
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function updateProgress() {
+            const percent = (video.currentTime / video.duration) * 100;
+            progressFilled.style.width = `${percent}%`;
+            timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration || 0)}`;
+        }
+
+        function scrub(e) {
+            const scrubTime = (e.offsetX / progressContainer.offsetWidth) * video.duration;
+            video.currentTime = scrubTime;
+        }
+
+        // Event Listeners
+        video.addEventListener('click', togglePlay);
+        centerPlayBtn.addEventListener('click', togglePlay);
+        playPauseBtn.addEventListener('click', togglePlay);
+        video.addEventListener('play', updatePlayIcon);
+        video.addEventListener('pause', updatePlayIcon);
+        video.addEventListener('timeupdate', updateProgress);
+
+        let mousedown = false;
+        progressContainer.addEventListener('click', scrub);
+        progressContainer.addEventListener('mousemove', (e) => mousedown && scrub(e));
+        progressContainer.addEventListener('mousedown', () => mousedown = true);
+        document.addEventListener('mouseup', () => mousedown = false);
+
+        fsBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                videoContainer.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // --- Rotation Logic ---
+        function applyRotation(deg) {
+            // Apply rotation ONLY to the video element, not the container
+            video.style.transform = `rotate(${deg}deg)`;
+
+            // Adjust scale if vertical to fit container?
+            // For now, let's keep it simple: just rotate. The container crops overflow.
+            // If user wants to see full vertical video in landscape container, they might need to scale down.
+            if (deg % 180 !== 0) {
+                // Scale down to fit height? 
+                // Simple approach: Scale = Container Height / Video Width
+                // Let's just rotate for now as requested.
+            }
+        }
+
+        rotateBtn.addEventListener('click', () => {
+            currentRotation = (currentRotation + 90) % 360;
+            applyRotation(currentRotation);
+            if (videoId) localStorage.setItem(`vf-rot-${videoId}`, currentRotation);
+        });
+
+        // --- App Logic ---
+
+        if (window.videoData && window.videoData.length > 0) {
+            let currentVideo = null;
+            if (videoId) currentVideo = window.videoData.find(v => v.id === videoId);
+            if (!currentVideo) {
+                currentVideo = window.videoData[0];
+                videoId = currentVideo.id;
+            }
+
+            // Update Metadata
+            document.title = `${currentVideo.title} - VidFlow`;
+            document.getElementById('vidTitle').textContent = currentVideo.title;
+            document.getElementById('vidDesc').textContent = currentVideo.description;
+            document.getElementById('vidDate').textContent = new Date(currentVideo.date).toLocaleDateString();
+
+            // Load saved rotation
+            const savedRot = localStorage.getItem(`vf-rot-${videoId}`);
+            if (savedRot) {
+                currentRotation = parseInt(savedRot);
+                applyRotation(currentRotation);
+            }
+
+            // Load Source
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(currentVideo.playlist);
+                hls.attachMedia(video);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = currentVideo.playlist;
+            }
+
+            // Render Sidebar
+            const relatedList = document.getElementById('relatedList');
+            window.videoData.forEach(v => {
+                const isAssert = (v.id === videoId) ? 'active' : '';
+                const link = document.createElement('a');
+                link.href = `index.html?v=${v.id}`;
+                link.className = `related-card ${isAssert}`;
+                link.innerHTML = `
+                    <div class="related-thumb">
+                        <img src="${v.thumbnail}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCIgZmlsbD0iIzMzMyI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgLz48L3N2Zz4='">
+                    </div>
+                    <div class="related-info">
+                        <div class="related-title">${v.title}</div>
+                        <div class="related-date">${new Date(v.date).toLocaleDateString()}</div>
+                    </div>
+                `;
+                relatedList.appendChild(link);
+            });
+        }
+    </script>
+</body>
+
+</html>
